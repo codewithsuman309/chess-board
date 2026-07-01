@@ -1,0 +1,1566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Online Chess</title>
+
+<!-- Google Fonts: Outfit for display headings, Inter for UI text, JetBrains Mono for numbers/clocks -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+<!-- chess.js — handles ALL chess rules: legal moves, castling, promotion, check/checkmate/stalemate -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+<!-- Firebase (compat build) — used only for "Play with Friend" online multiplayer -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+<style>
+/* ==========================================================================
+   ONLINE CHESS — STYLESHEET
+   Theme: Modern Blue & Green glassmorphism
+   ========================================================================== */
+
+:root{
+  /* ---- Color tokens ---- */
+  --bg-a: #060a16;
+  --bg-b: #0b1730;
+  --bg-c: #071b16;
+  --blue: #3b82f6;
+  --blue-bright: #60a5fa;
+  --blue-deep: #1d4ed8;
+  --green: #22c55e;
+  --green-bright: #4ade80;
+  --green-deep: #15803d;
+  --glass: rgba(255,255,255,0.055);
+  --glass-strong: rgba(255,255,255,0.09);
+  --glass-border: rgba(255,255,255,0.14);
+  --text: #eaf1fb;
+  --text-dim: #93a3bb;
+  --text-faint: #5f7290;
+  --danger: #f87171;
+  --gold: #fbbf24;
+
+  --square-light: linear-gradient(155deg, #274b7a, #1b3559);
+  --square-dark: linear-gradient(155deg, #12362a, #0c241c);
+  --square-light-hover: linear-gradient(155deg, #35659e, #26466f);
+  --square-dark-hover: linear-gradient(155deg, #18492f, #123a24);
+
+  --radius-lg: 22px;
+  --radius-md: 14px;
+  --radius-sm: 9px;
+}
+
+*{ box-sizing: border-box; margin:0; padding:0; }
+
+html,body{
+  height:100%;
+  font-family:'Inter', sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(59,130,246,0.16), transparent 45%),
+    radial-gradient(circle at 85% 90%, rgba(34,197,94,0.14), transparent 45%),
+    linear-gradient(160deg, var(--bg-a) 0%, var(--bg-b) 55%, var(--bg-c) 100%);
+  background-attachment: fixed;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+/* subtle animated ambient glow drifting behind everything */
+body::before{
+  content:"";
+  position:fixed; inset:-20%;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(59,130,246,0.10), transparent 40%),
+    radial-gradient(circle at 70% 70%, rgba(34,197,94,0.10), transparent 40%);
+  animation: drift 18s ease-in-out infinite alternate;
+  pointer-events:none;
+  z-index:0;
+}
+@keyframes drift{
+  0%   { transform: translate(0,0) scale(1); }
+  100% { transform: translate(3%, -3%) scale(1.08); }
+}
+
+h1,h2,h3, .brand, .btn, .tab{ font-family:'Outfit', sans-serif; }
+
+::selection{ background: rgba(59,130,246,0.35); }
+
+button{ font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+input{ font-family:inherit; }
+
+.hidden{ display:none !important; }
+
+/* ---------------------------------------------------------------------- */
+/* Layout shell                                                           */
+/* ---------------------------------------------------------------------- */
+.app{
+  position:relative; z-index:1;
+  min-height:100vh;
+  display:flex; flex-direction:column; align-items:center;
+  padding: 24px 16px 60px;
+}
+
+.screen{ width:100%; max-width:1180px; }
+
+/* ---------------------------------------------------------------------- */
+/* Glass card base                                                        */
+/* ---------------------------------------------------------------------- */
+.glass{
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+}
+
+/* ---------------------------------------------------------------------- */
+/* HOME SCREEN                                                            */
+/* ---------------------------------------------------------------------- */
+.home{
+  min-height: 82vh;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  text-align:center;
+  gap: 46px;
+  animation: fadeUp .6s ease;
+}
+
+.brand-mark{
+  display:flex; align-items:center; gap:14px; justify-content:center;
+}
+.brand-mark .knight-glyph{
+  font-size: 46px;
+  background: linear-gradient(135deg, var(--blue-bright), var(--green-bright));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter: drop-shadow(0 0 18px rgba(59,130,246,0.45));
+}
+.home h1{
+  font-size: clamp(36px, 6vw, 58px);
+  font-weight:800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, var(--blue-bright) 10%, var(--green-bright) 90%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+.home p.tagline{
+  color: var(--text-dim);
+  font-size: 15px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-top: 6px;
+}
+
+.home-actions{
+  display:flex; gap:22px; flex-wrap:wrap; justify-content:center;
+}
+
+.mode-card{
+  width: 240px;
+  padding: 30px 24px;
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+}
+.mode-card:hover{
+  transform: translateY(-6px);
+  border-color: rgba(255,255,255,0.28);
+}
+.mode-card .icon{
+  width:64px; height:64px;
+  border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:30px;
+}
+.mode-card.friend .icon{ background: linear-gradient(135deg, var(--blue), var(--blue-deep)); box-shadow: 0 0 26px rgba(59,130,246,0.55); }
+.mode-card.computer .icon{ background: linear-gradient(135deg, var(--green), var(--green-deep)); box-shadow: 0 0 26px rgba(34,197,94,0.55); }
+.mode-card h3{ font-size:19px; font-weight:600; }
+.mode-card span{ color: var(--text-dim); font-size:13px; }
+
+/* ---------------------------------------------------------------------- */
+/* Buttons                                                                */
+/* ---------------------------------------------------------------------- */
+.btn{
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight:600; font-size:14.5px;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+  display:inline-flex; align-items:center; gap:8px;
+}
+.btn:active{ transform: scale(0.96); }
+.btn-primary{
+  background: linear-gradient(120deg, var(--blue), var(--green));
+  color:#fff;
+  box-shadow: 0 6px 22px rgba(34,197,94,0.25);
+}
+.btn-primary:hover{ filter: brightness(1.1); box-shadow: 0 8px 28px rgba(59,130,246,0.4); }
+.btn-outline{
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--text);
+}
+.btn-outline:hover{ background: var(--glass-strong); }
+.btn-ghost{
+  color: var(--text-dim);
+  padding: 8px 14px;
+}
+.btn-ghost:hover{ color: var(--text); }
+.btn-sm{ padding: 8px 16px; font-size:13px; }
+.btn:disabled{ opacity:.5; cursor:not-allowed; transform:none; }
+
+/* ---------------------------------------------------------------------- */
+/* Top bar (back button + title) shown on sub-screens                    */
+/* ---------------------------------------------------------------------- */
+.topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  width:100%; margin-bottom: 26px;
+}
+.topbar .title{ font-size:20px; font-weight:700; letter-spacing:-0.01em; }
+
+/* ---------------------------------------------------------------------- */
+/* FRIEND LOBBY SCREEN                                                    */
+/* ---------------------------------------------------------------------- */
+.lobby-card{
+  max-width: 520px; margin: 40px auto 0;
+  padding: 34px 30px;
+  display:flex; flex-direction:column; gap:20px;
+  animation: fadeUp .5s ease;
+}
+.lobby-card h2{ font-size:22px; font-weight:700; }
+.lobby-card p.hint{ color:var(--text-dim); font-size:13.5px; line-height:1.5; }
+
+.field-label{
+  font-size:12.5px; text-transform:uppercase; letter-spacing:0.08em;
+  color:var(--text-dim); margin-bottom:8px; display:block;
+}
+
+.time-grid{
+  display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;
+}
+.time-chip{
+  padding:10px 6px; text-align:center; border-radius: var(--radius-sm);
+  border:1px solid var(--glass-border); background: var(--glass);
+  font-size:13px; font-weight:600; color:var(--text-dim);
+  transition: all .15s ease;
+}
+.time-chip:hover{ border-color: rgba(255,255,255,0.3); }
+.time-chip.selected{
+  background: linear-gradient(120deg, var(--blue), var(--green));
+  color:#fff; border-color:transparent;
+}
+
+.room-link-row{
+  display:flex; gap:8px; align-items:center;
+  background: rgba(0,0,0,0.25); border:1px solid var(--glass-border);
+  border-radius: var(--radius-sm); padding: 10px 12px;
+}
+.room-link-row input{
+  flex:1; background:transparent; border:none; color:var(--text-dim);
+  font-size:13px; font-family:'JetBrains Mono', monospace; outline:none;
+}
+.room-id-display{
+  text-align:center; font-family:'JetBrains Mono', monospace;
+  font-size: 30px; font-weight:700; letter-spacing: 0.12em;
+  background: linear-gradient(100deg, var(--blue-bright), var(--green-bright));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  padding: 6px 0;
+}
+
+.waiting-row{
+  display:flex; align-items:center; gap:12px; justify-content:center;
+  color: var(--text-dim); font-size:13.5px;
+  padding: 6px 0;
+}
+.spinner{
+  width:16px; height:16px; border-radius:50%;
+  border: 2.5px solid rgba(255,255,255,0.15);
+  border-top-color: var(--green-bright);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin{ to{ transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------------- */
+/* GAME SCREEN                                                            */
+/* ---------------------------------------------------------------------- */
+.game-layout{
+  display:grid;
+  grid-template-columns: 1fr minmax(320px, 560px) 1fr;
+  gap: 22px;
+  align-items:start;
+  animation: fadeUp .5s ease;
+}
+
+.side-panel{
+  display:flex; flex-direction:column; gap:16px;
+}
+
+.player-card{
+  padding: 16px 18px;
+  display:flex; align-items:center; justify-content:space-between;
+  gap: 10px;
+  border-left: 3px solid transparent;
+  transition: border-color .3s ease, box-shadow .3s ease;
+}
+.player-card.active-turn{
+  border-left-color: var(--green-bright);
+  box-shadow: 0 0 0 1px rgba(74,222,128,0.25), 0 8px 24px rgba(34,197,94,0.15);
+}
+.player-info{ display:flex; align-items:center; gap:12px; min-width:0; }
+.player-avatar{
+  width:40px; height:40px; border-radius:50%; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:15px; color:#fff;
+}
+.player-avatar.white-side{ background: linear-gradient(135deg,#dfe8f5,#9fb3cc); color:#0b1730; }
+.player-avatar.black-side{ background: linear-gradient(135deg,#26324a,#0c1424); }
+.player-meta{ min-width:0; }
+.player-name{ font-weight:600; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px; }
+.player-tag{ font-size:11.5px; color:var(--text-dim); }
+.player-clock{
+  font-family:'JetBrains Mono', monospace; font-size:21px; font-weight:700;
+  padding: 5px 12px; border-radius:10px; background: rgba(0,0,0,0.3);
+  min-width: 78px; text-align:center; letter-spacing:0.02em;
+}
+.player-clock.low-time{ color: var(--danger); animation: pulseWarn 1s infinite; }
+@keyframes pulseWarn{ 50%{ opacity:.45; } }
+
+.captured-row{
+  display:flex; flex-wrap:wrap; gap:2px; min-height:22px;
+  font-size:17px; line-height:1;
+  padding: 0 18px 14px;
+  margin-top:-14px;
+}
+.captured-row span{ opacity:0.85; }
+
+.status-card{
+  padding: 16px 18px; text-align:center;
+}
+.status-text{ font-size:15px; font-weight:700; }
+.status-text.check{ color: var(--gold); }
+.status-text.over{ color: var(--green-bright); }
+.status-sub{ font-size:12.5px; color:var(--text-dim); margin-top:4px; }
+
+.history-card{
+  padding: 14px 16px; flex:1; min-height:180px; max-height: 320px;
+  display:flex; flex-direction:column;
+}
+.history-card h4{ font-size:12.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:10px; }
+.history-list{
+  overflow-y:auto; flex:1;
+  font-family:'JetBrains Mono', monospace; font-size:13px;
+  display:grid; grid-template-columns: 26px 1fr 1fr; row-gap:5px; column-gap:6px;
+}
+.history-list .mv-num{ color: var(--text-faint); }
+.history-list .mv-white, .history-list .mv-black{ color: var(--text); }
+.history-list::-webkit-scrollbar{ width:6px; }
+.history-list::-webkit-scrollbar-thumb{ background: rgba(255,255,255,0.15); border-radius:6px; }
+
+.controls-row{ display:flex; gap:10px; flex-wrap:wrap; }
+.controls-row .btn{ flex:1; justify-content:center; }
+
+/* ---------------------------------------------------------------------- */
+/* BOARD                                                                  */
+/* ---------------------------------------------------------------------- */
+.board-wrap{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+}
+.turn-banner{
+  display:flex; align-items:center; gap:10px;
+  padding: 8px 18px; border-radius:999px;
+  font-size:13px; font-weight:600; color:var(--text-dim);
+}
+.turn-dot{ width:10px; height:10px; border-radius:50%; background: var(--green-bright); box-shadow:0 0 10px var(--green-bright); animation: dotPulse 1.4s infinite; }
+@keyframes dotPulse{ 50%{ opacity:.4; transform:scale(0.8);} }
+
+.board-frame{
+  padding: 14px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, rgba(59,130,246,0.14), rgba(34,197,94,0.14));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.03);
+}
+
+.board{
+  display:grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
+  width: min(480px, 82vw);
+  height: min(480px, 82vw);
+  border-radius: 12px;
+  overflow:hidden;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.06);
+}
+
+.square{
+  position:relative;
+  display:flex; align-items:center; justify-content:center;
+  font-size: clamp(24px, 6.5vw, 42px);
+  user-select:none;
+  transition: background .12s ease;
+  cursor:pointer;
+}
+.square.light{ background: var(--square-light); box-shadow: inset 0 0 22px rgba(59,130,246,0.18); }
+.square.dark{  background: var(--square-dark);  box-shadow: inset 0 0 22px rgba(34,197,94,0.20); }
+.square.light:hover{ background: var(--square-light-hover); }
+.square.dark:hover{ background: var(--square-dark-hover); }
+
+.square .piece{
+  transition: transform .15s ease;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.5));
+  pointer-events:none;
+}
+.square.selected{ box-shadow: inset 0 0 0 3px var(--gold); }
+.square.last-from, .square.last-to{ box-shadow: inset 0 0 0 3px rgba(96,165,250,0.55); }
+.square.in-check{ box-shadow: inset 0 0 0 3px var(--danger), inset 0 0 24px rgba(248,113,113,0.55); }
+
+.move-dot::after{
+  content:"";
+  width: 26%; height:26%;
+  border-radius:50%;
+  background: rgba(255,255,255,0.55);
+  position:absolute;
+}
+.capture-ring::after{
+  content:"";
+  position:absolute; inset:6%;
+  border-radius: 10%;
+  box-shadow: inset 0 0 0 4px rgba(255,255,255,0.55);
+}
+
+.coord-label{
+  position:absolute; font-size:9px; font-weight:700; opacity:0.55;
+  font-family:'JetBrains Mono', monospace;
+}
+.coord-file{ bottom:2px; right:4px; }
+.coord-rank{ top:2px; left:4px; }
+
+/* piece pop-in animation when a move lands */
+@keyframes landPop{
+  0%{ transform: scale(0.7); }
+  60%{ transform: scale(1.12); }
+  100%{ transform: scale(1); }
+}
+.piece.landed{ animation: landPop .22s ease; }
+
+/* ---------------------------------------------------------------------- */
+/* Promotion modal                                                       */
+/* ---------------------------------------------------------------------- */
+.modal-overlay{
+  position:fixed; inset:0; background: rgba(4,8,18,0.72);
+  display:flex; align-items:center; justify-content:center;
+  z-index: 50; backdrop-filter: blur(4px);
+}
+.promo-card{
+  padding: 26px 30px; text-align:center;
+  animation: fadeUp .25s ease;
+}
+.promo-card h3{ font-size:16px; margin-bottom:16px; }
+.promo-options{ display:flex; gap:12px; }
+.promo-btn{
+  width:60px; height:60px; font-size:34px;
+  border-radius: var(--radius-md);
+  background: var(--glass); border:1px solid var(--glass-border);
+  display:flex; align-items:center; justify-content:center;
+  transition: all .15s ease;
+}
+.promo-btn:hover{ background: linear-gradient(120deg, var(--blue), var(--green)); transform: translateY(-3px); }
+
+/* ---------------------------------------------------------------------- */
+/* Game over overlay                                                     */
+/* ---------------------------------------------------------------------- */
+.result-card{
+  padding: 34px 40px; text-align:center; max-width:360px;
+  animation: fadeUp .35s ease;
+}
+.result-card .emoji{ font-size:44px; margin-bottom:10px; }
+.result-card h2{ font-size:24px; margin-bottom:6px; }
+.result-card p{ color:var(--text-dim); font-size:14px; margin-bottom:22px; }
+.result-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+/* ---------------------------------------------------------------------- */
+/* Toast / notice                                                        */
+/* ---------------------------------------------------------------------- */
+.toast{
+  position:fixed; bottom:26px; left:50%; transform: translateX(-50%);
+  padding: 12px 20px; border-radius: 999px;
+  background: rgba(15,23,41,0.92); border:1px solid var(--glass-border);
+  font-size:13.5px; z-index: 80;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  animation: fadeUp .25s ease;
+}
+
+.sound-toggle{
+  position:fixed; top:18px; right:18px; z-index:30;
+  width:44px; height:44px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:19px;
+}
+
+@keyframes fadeUp{
+  from{ opacity:0; transform: translateY(14px); }
+  to{ opacity:1; transform: translateY(0); }
+}
+
+/* ---------------------------------------------------------------------- */
+/* Responsive                                                             */
+/* ---------------------------------------------------------------------- */
+@media (max-width: 980px){
+  .game-layout{ grid-template-columns: 1fr; }
+  .side-panel{ flex-direction:row; flex-wrap:wrap; }
+  .side-panel.left .player-card, .side-panel.right .player-card{ flex:1 1 260px; }
+  .history-card{ flex:1 1 100%; }
+  .board-wrap{ order:-1; }
+}
+@media (max-width: 560px){
+  .side-panel{ flex-direction:column; }
+  .mode-card{ width: 100%; max-width:280px; }
+  .time-grid{ grid-template-columns: repeat(3,1fr); }
+  .app{ padding: 16px 10px 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Global sound toggle, visible on every screen -->
+<button class="sound-toggle glass" id="soundToggleBtn" title="Toggle sound">🔊</button>
+
+<div class="app">
+
+  <!-- ======================= HOME SCREEN ======================= -->
+  <section class="screen home" id="screen-home">
+    <div>
+      <div class="brand-mark">
+        <span class="knight-glyph">♞</span>
+      </div>
+      <h1>Online Chess</h1>
+      <p class="tagline">Play with a friend, or challenge the computer</p>
+    </div>
+
+    <div class="home-actions">
+      <button class="mode-card glass friend" id="btnPlayFriend">
+        <div class="icon">🤝</div>
+        <h3>Play with Friend</h3>
+        <span>Create a room &amp; share the link</span>
+      </button>
+      <button class="mode-card glass computer" id="btnPlayComputer">
+        <div class="icon">🤖</div>
+        <h3>Play with Computer</h3>
+        <span>Easy AI opponent</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ======================= FRIEND LOBBY SCREEN ======================= -->
+  <section class="screen hidden" id="screen-lobby">
+    <div class="topbar">
+      <button class="btn btn-ghost" id="lobbyBack">← Back</button>
+      <span class="title">Play with Friend</span>
+      <span style="width:70px"></span>
+    </div>
+
+    <!-- Create room panel -->
+    <div class="lobby-card glass" id="createPanel">
+      <h2>Create a Game</h2>
+      <p class="hint">Choose a time control, then create a room and send the link to your friend.</p>
+
+      <div>
+        <span class="field-label">Time Control</span>
+        <div class="time-grid" id="timeGrid">
+          <div class="time-chip" data-min="1">1 min</div>
+          <div class="time-chip" data-min="3">3 min</div>
+          <div class="time-chip selected" data-min="5">5 min</div>
+          <div class="time-chip" data-min="10">10 min</div>
+          <div class="time-chip" data-min="15">15 min</div>
+          <div class="time-chip" data-min="30">30 min</div>
+          <div class="time-chip" data-min="0">Unlimited</div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="btnCreateRoom" style="justify-content:center;">Create Game</button>
+    </div>
+
+    <!-- Room created — waiting / share panel -->
+    <div class="lobby-card glass hidden" id="waitPanel">
+      <h2>Room Created</h2>
+      <div class="room-id-display" id="roomIdDisplay">------</div>
+      <span class="field-label">Shareable Link</span>
+      <div class="room-link-row">
+        <input type="text" id="roomLinkInput" readonly>
+        <button class="btn btn-outline btn-sm" id="btnCopyLink">Copy Link</button>
+      </div>
+      <div class="waiting-row"><div class="spinner"></div> Waiting for your friend to join…</div>
+    </div>
+
+    <!-- Joining via shared link -->
+    <div class="lobby-card glass hidden" id="joinPanel">
+      <h2>Joining Room…</h2>
+      <div class="waiting-row"><div class="spinner"></div> <span id="joinStatusText">Connecting to room</span></div>
+    </div>
+  </section>
+
+  <!-- ======================= GAME SCREEN ======================= -->
+  <section class="screen hidden" id="screen-game">
+    <div class="topbar">
+      <button class="btn btn-ghost" id="gameBack">← Home</button>
+      <span class="title" id="gameModeTitle">Playing vs Computer</span>
+      <button class="btn btn-outline btn-sm hidden" id="btnCopyLinkGame">Copy Link</button>
+    </div>
+
+    <div class="game-layout">
+      <!-- LEFT PANEL -->
+      <div class="side-panel left">
+        <div class="player-card glass" id="cardTop">
+          <div class="player-info">
+            <div class="player-avatar black-side">♚</div>
+            <div class="player-meta">
+              <div class="player-name" id="nameTop">Black</div>
+              <div class="player-tag">Black</div>
+            </div>
+          </div>
+          <div class="player-clock" id="clockTop">05:00</div>
+        </div>
+        <div class="captured-row" id="capturedTop"></div>
+
+        <div class="status-card glass">
+          <div class="status-text" id="statusText">White to move</div>
+          <div class="status-sub" id="statusSub">Game in progress</div>
+        </div>
+
+        <div class="history-card glass">
+          <h4>Move History</h4>
+          <div class="history-list" id="historyList"></div>
+        </div>
+      </div>
+
+      <!-- CENTER BOARD -->
+      <div class="board-wrap">
+        <div class="turn-banner glass"><span class="turn-dot"></span><span id="turnBannerText">White to move</span></div>
+        <div class="board-frame">
+          <div class="board" id="board"></div>
+        </div>
+        <div class="controls-row">
+          <button class="btn btn-outline" id="btnUndo">↺ Undo</button>
+          <button class="btn btn-outline" id="btnRestart">⟳ Restart</button>
+        </div>
+      </div>
+
+      <!-- RIGHT PANEL -->
+      <div class="side-panel right">
+        <div class="player-card glass" id="cardBottom">
+          <div class="player-info">
+            <div class="player-avatar white-side">♔</div>
+            <div class="player-meta">
+              <div class="player-name" id="nameBottom">White</div>
+              <div class="player-tag">White</div>
+            </div>
+          </div>
+          <div class="player-clock" id="clockBottom">05:00</div>
+        </div>
+        <div class="captured-row" id="capturedBottom"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- Promotion picker modal -->
+<div class="modal-overlay hidden" id="promoModal">
+  <div class="promo-card glass">
+    <h3>Promote pawn to:</h3>
+    <div class="promo-options" id="promoOptions"></div>
+  </div>
+</div>
+
+<!-- Game over modal -->
+<div class="modal-overlay hidden" id="resultModal">
+  <div class="result-card glass">
+    <div class="emoji" id="resultEmoji">🏆</div>
+    <h2 id="resultTitle">Checkmate</h2>
+    <p id="resultSub">White wins</p>
+    <div class="result-actions">
+      <button class="btn btn-primary" id="btnPlayAgain">Play Again</button>
+      <button class="btn btn-outline" id="btnResultHome">Home</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   ONLINE CHESS — APPLICATION LOGIC
+   Sections:
+     1. Firebase setup (optional — for online multiplayer)
+     2. Global state
+     3. Sound engine (Web Audio API — no external audio files needed)
+     4. Screen navigation helpers
+     5. Home screen
+     6. Friend lobby (create / join room)
+     7. Online sync (Firestore)
+     8. Chess board rendering + interaction
+     9. Chess clock
+     10. Computer AI (easy)
+     11. Game over / status handling
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------- */
+/* 1. FIREBASE SETUP                                                      */
+/* ---------------------------------------------------------------------- */
+// To enable real online multiplayer, replace this with YOUR OWN Firebase
+// project config (Firebase Console → Project Settings → General → Your apps).
+// Firestore must be enabled in "test mode" (or with rules that allow
+// read/write on the "rooms" collection) for this to work.
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+let db = null;
+let firebaseReady = false;
+try{
+  if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY"){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    firebaseReady = true;
+  }
+}catch(e){
+  console.warn("Firebase not configured:", e);
+}
+
+/* ---------------------------------------------------------------------- */
+/* 2. GLOBAL STATE                                                        */
+/* ---------------------------------------------------------------------- */
+const chess = new Chess();               // chess.js instance — source of truth for rules
+let mode = null;                         // 'computer' | 'friend'
+let myColor = 'w';                       // which color THIS browser plays (online mode)
+let selectedSquare = null;               // currently selected square, e.g. "e2"
+let legalTargets = [];                   // legal destination squares for selectedSquare
+let lastMove = null;                     // {from, to} for highlighting
+let soundOn = true;
+let roomId = null;
+let roomUnsub = null;                    // Firestore listener unsubscribe function
+let clientId = getClientId();
+let isMyTurnOnline = true;
+
+// Clock state
+let timeControlMinutes = 5;
+let whiteTime = 300, blackTime = 300;    // seconds remaining
+let clockInterval = null;
+let lastTickAt = null;
+
+// Board orientation: in "friend" mode, board flips so each player sees
+// their own pieces at the bottom. In computer mode, white is always bottom.
+let boardFlipped = false;
+
+/* ---------------------------------------------------------------------- */
+/* 3. SOUND ENGINE (Web Audio API — generates tones, no audio files)      */
+/* ---------------------------------------------------------------------- */
+let audioCtx = null;
+function ensureAudio(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playTone(freq, duration, type='sine', delay=0, gain=0.18){
+  if (!soundOn) return;
+  try{
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    g.gain.value = gain;
+    osc.connect(g); g.connect(audioCtx.destination);
+    const t0 = audioCtx.currentTime + delay;
+    osc.start(t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+    osc.stop(t0 + duration + 0.02);
+  }catch(e){ /* audio not available */ }
+}
+const Sound = {
+  move()    { playTone(420, 0.09, 'triangle'); },
+  capture() { playTone(260, 0.07, 'square'); playTone(180, 0.09, 'square', 0.05); },
+  check()   { playTone(880, 0.12, 'sawtooth'); playTone(660, 0.14, 'sawtooth', 0.08); },
+  win()     { [523,659,784,1047].forEach((f,i)=>playTone(f,0.18,'triangle',i*0.12,0.16)); },
+  gameover(){ playTone(300,0.25,'sine'); playTone(220,0.3,'sine',0.15); }
+};
+document.getElementById('soundToggleBtn').addEventListener('click', ()=>{
+  soundOn = !soundOn;
+  document.getElementById('soundToggleBtn').textContent = soundOn ? '🔊' : '🔇';
+});
+
+/* ---------------------------------------------------------------------- */
+/* Helper: unique-ish client id, persisted per browser tab session        */
+/* ---------------------------------------------------------------------- */
+function getClientId(){
+  let id = sessionStorage.getItem('chessClientId');
+  if (!id){
+    id = 'p_' + Math.random().toString(36).slice(2, 10);
+    sessionStorage.setItem('chessClientId', id);
+  }
+  return id;
+}
+function randomRoomId(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let id = '';
+  for (let i=0;i<6;i++) id += chars[Math.floor(Math.random()*chars.length)];
+  return id;
+}
+
+/* ---------------------------------------------------------------------- */
+/* 4. SCREEN NAVIGATION                                                   */
+/* ---------------------------------------------------------------------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+function showToast(msg, ms=2600){
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=> t.remove(), ms);
+}
+
+/* ---------------------------------------------------------------------- */
+/* 5. HOME SCREEN                                                         */
+/* ---------------------------------------------------------------------- */
+document.getElementById('btnPlayFriend').addEventListener('click', ()=>{
+  showScreen('screen-lobby');
+  document.getElementById('createPanel').classList.remove('hidden');
+  document.getElementById('waitPanel').classList.add('hidden');
+  document.getElementById('joinPanel').classList.add('hidden');
+});
+document.getElementById('btnPlayComputer').addEventListener('click', ()=>{
+  startComputerGame();
+});
+document.getElementById('lobbyBack').addEventListener('click', ()=>{
+  cleanupOnlineListener();
+  showScreen('screen-home');
+});
+document.getElementById('gameBack').addEventListener('click', ()=>{
+  leaveGameToHome();
+});
+
+/* ---------------------------------------------------------------------- */
+/* 6. FRIEND LOBBY — CREATE / JOIN ROOM                                   */
+/* ---------------------------------------------------------------------- */
+document.querySelectorAll('.time-chip').forEach(chip=>{
+  chip.addEventListener('click', ()=>{
+    document.querySelectorAll('.time-chip').forEach(c=>c.classList.remove('selected'));
+    chip.classList.add('selected');
+    timeControlMinutes = parseInt(chip.dataset.min, 10);
+  });
+});
+
+document.getElementById('btnCreateRoom').addEventListener('click', async ()=>{
+  if (!firebaseReady){
+    showToast("⚠ Firebase isn't configured — add your project keys in script.js to enable online play.");
+    return;
+  }
+  roomId = randomRoomId();
+  const seconds = timeControlMinutes * 60;
+
+  const roomData = {
+    fen: chess.fen(),
+    turn: 'w',
+    whiteId: clientId,
+    blackId: null,
+    status: 'waiting',
+    timeControlMinutes: timeControlMinutes,
+    whiteTime: seconds || 999999,
+    blackTime: seconds || 999999,
+    lastMoveAt: firebase.firestore.FieldValue.serverTimestamp(),
+    moveHistorySAN: [],
+    lastMoveFrom: null,
+    lastMoveTo: null,
+    lastMoveFlags: '',
+    winner: null,
+    reason: null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  await db.collection('rooms').doc(roomId).set(roomData);
+
+  document.getElementById('roomIdDisplay').textContent = roomId;
+  const link = `${location.origin}${location.pathname}?room=${roomId}`;
+  document.getElementById('roomLinkInput').value = link;
+  document.getElementById('createPanel').classList.add('hidden');
+  document.getElementById('waitPanel').classList.remove('hidden');
+
+  myColor = 'w';
+  listenToRoom(roomId, true);
+});
+
+document.getElementById('btnCopyLink').addEventListener('click', ()=>{
+  const input = document.getElementById('roomLinkInput');
+  input.select();
+  navigator.clipboard?.writeText(input.value).then(()=> showToast('Link copied!'));
+});
+document.getElementById('btnCopyLinkGame').addEventListener('click', ()=>{
+  const link = `${location.origin}${location.pathname}?room=${roomId}`;
+  navigator.clipboard?.writeText(link).then(()=> showToast('Link copied!'));
+});
+
+// Auto-join if URL contains ?room=XXXXXX
+(function checkForRoomInUrl(){
+  const params = new URLSearchParams(location.search);
+  const rid = params.get('room');
+  if (rid){
+    roomId = rid.toUpperCase();
+    showScreen('screen-lobby');
+    document.getElementById('createPanel').classList.add('hidden');
+    document.getElementById('joinPanel').classList.remove('hidden');
+    joinRoom(roomId);
+  }
+})();
+
+async function joinRoom(rid){
+  if (!firebaseReady){
+    document.getElementById('joinStatusText').textContent = "Firebase not configured on this deployment.";
+    return;
+  }
+  const ref = db.collection('rooms').doc(rid);
+  const snap = await ref.get();
+  if (!snap.exists){
+    document.getElementById('joinStatusText').textContent = "Room not found.";
+    showToast("That room doesn't exist.");
+    return;
+  }
+  const data = snap.data();
+
+  if (data.whiteId === clientId){
+    myColor = 'w';               // creator reopening their own link
+  } else if (data.blackId === clientId){
+    myColor = 'b';               // rejoining as black
+  } else if (!data.blackId){
+    myColor = 'b';
+    await ref.update({ blackId: clientId, status: 'active' });
+  } else {
+    document.getElementById('joinStatusText').textContent = "Room is full.";
+    showToast("This room already has two players.");
+    return;
+  }
+
+  listenToRoom(rid, true);
+}
+
+/* ---------------------------------------------------------------------- */
+/* 7. ONLINE SYNC (Firestore realtime listener)                          */
+/* ---------------------------------------------------------------------- */
+function listenToRoom(rid, enterGameOnActive){
+  cleanupOnlineListener();
+  mode = 'friend';
+  boardFlipped = (myColor === 'b');
+
+  roomUnsub = db.collection('rooms').doc(rid).onSnapshot(snap=>{
+    if (!snap.exists) return;
+    const data = snap.data();
+    applyRoomData(data, enterGameOnActive);
+  });
+}
+function cleanupOnlineListener(){
+  if (roomUnsub){ roomUnsub(); roomUnsub = null; }
+}
+
+let lastAppliedFen = null;
+function applyRoomData(data, enterGameOnActive){
+  // Once both players present, move into the game screen
+  if (data.status === 'active' || data.status === 'finished'){
+    if (document.getElementById('screen-game').classList.contains('hidden')){
+      enterGameScreen();
+    }
+  }
+
+  timeControlMinutes = data.timeControlMinutes;
+  whiteTime = data.whiteTime;
+  blackTime = data.blackTime;
+
+  document.getElementById('nameTop').textContent    = boardFlipped ? 'White' : 'Black';
+  document.getElementById('nameBottom').textContent = boardFlipped ? 'Black' : 'White';
+  document.getElementById('btnCopyLinkGame').classList.remove('hidden');
+  document.getElementById('btnUndo').disabled = true; // Undo disabled in online mode
+  document.getElementById('btnUndo').title = "Undo is disabled in online games";
+
+  // Sync board position if it changed (i.e. opponent moved)
+  if (data.fen !== lastAppliedFen){
+    const wasCapture = data.lastMoveFlags && data.lastMoveFlags.includes('c');
+    const wasCheckBefore = lastAppliedFen !== null;
+    chess.load(data.fen);
+    lastAppliedFen = data.fen;
+    lastMove = data.lastMoveFrom ? { from: data.lastMoveFrom, to: data.lastMoveTo } : null;
+    renderBoard();
+    updateCapturedPieces();
+    renderHistory(data.moveHistorySAN || []);
+    updateStatus();
+
+    if (wasCheckBefore){
+      if (wasCapture) Sound.capture(); else Sound.move();
+      if (chess.in_check() && !chess.game_over()) Sound.check();
+    }
+  }
+
+  isMyTurnOnline = (data.turn === myColor);
+  updateActiveTurnUI(data.turn);
+  updatePlayerCardsColorLabels();
+
+  if (data.status === 'finished' && !gameEndedShown){
+    handleGameEndFromData(data);
+  }
+
+  // keep clocks visually correct even without a move (ticking handled locally)
+  renderClocks();
+}
+
+async function pushMoveToRoom(moveObj){
+  if (!db || !roomId) return;
+  const flags = moveObj.flags || '';
+  const nextTurn = chess.turn();
+  const updateData = {
+    fen: chess.fen(),
+    turn: nextTurn,
+    moveHistorySAN: firebase.firestore.FieldValue.arrayUnion(moveObj.san),
+    lastMoveFrom: moveObj.from,
+    lastMoveTo: moveObj.to,
+    lastMoveFlags: flags,
+    lastMoveAt: firebase.firestore.FieldValue.serverTimestamp(),
+    whiteTime: whiteTime,
+    blackTime: blackTime
+  };
+
+  if (chess.game_over()){
+    updateData.status = 'finished';
+    if (chess.in_checkmate()){
+      updateData.winner = (moveObj.color === 'w') ? 'w' : 'b';
+      updateData.reason = 'checkmate';
+    } else {
+      updateData.winner = null;
+      updateData.reason = chess.in_stalemate() ? 'stalemate' : 'draw';
+    }
+  }
+
+  lastAppliedFen = chess.fen(); // avoid re-processing our own move on next snapshot
+  await db.collection('rooms').doc(roomId).update(updateData);
+}
+
+async function pushTimeoutToRoom(loserColor){
+  if (!db || !roomId) return;
+  await db.collection('rooms').doc(roomId).update({
+    status: 'finished',
+    winner: loserColor === 'w' ? 'b' : 'w',
+    reason: 'timeout'
+  });
+}
+
+/* ---------------------------------------------------------------------- */
+/* 8. CHESS BOARD — rendering + interaction                              */
+/* ---------------------------------------------------------------------- */
+const PIECE_UNICODE = {
+  w: { p:'♙', n:'♘', b:'♗', r:'♖', q:'♕', k:'♔' },
+  b: { p:'♟', n:'♞', b:'♝', r:'♜', q:'♛', k:'♚' }
+};
+const FILES = ['a','b','c','d','e','f','g','h'];
+
+function buildBoardSquares(){
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  const ranks = boardFlipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
+  const files = boardFlipped ? [...FILES].reverse() : FILES;
+
+  ranks.forEach(rank=>{
+    files.forEach(file=>{
+      const square = file + rank;
+      const isLight = (FILES.indexOf(file) + rank) % 2 === 1;
+      const sq = document.createElement('div');
+      sq.className = 'square ' + (isLight ? 'light' : 'dark');
+      sq.dataset.square = square;
+      sq.addEventListener('click', ()=> onSquareClick(square));
+      boardEl.appendChild(sq);
+    });
+  });
+}
+
+function renderBoard(){
+  if (!document.getElementById('board').children.length ||
+      document.getElementById('board').dataset.flipped !== String(boardFlipped)){
+    buildBoardSquares();
+    document.getElementById('board').dataset.flipped = String(boardFlipped);
+  }
+
+  const boardState = chess.board(); // 8x8, [0]=rank8 ... [7]=rank1
+  document.querySelectorAll('.square').forEach(sqEl=>{
+    sqEl.innerHTML = '';
+    sqEl.classList.remove('selected','last-from','last-to','in-check','move-dot','capture-ring');
+    const square = sqEl.dataset.square;
+    const file = square[0], rank = parseInt(square[1], 10);
+    const rankIdx = 8 - rank;
+    const fileIdx = FILES.indexOf(file);
+    const piece = boardState[rankIdx][fileIdx];
+
+    if (piece){
+      const span = document.createElement('span');
+      span.className = 'piece landed';
+      span.textContent = PIECE_UNICODE[piece.color][piece.type];
+      sqEl.appendChild(span);
+    }
+
+    if (selectedSquare === square) sqEl.classList.add('selected');
+    if (lastMove && (lastMove.from === square)) sqEl.classList.add('last-from');
+    if (lastMove && (lastMove.to === square)) sqEl.classList.add('last-to');
+
+    if (legalTargets.includes(square)){
+      sqEl.classList.add(piece ? 'capture-ring' : 'move-dot');
+    }
+  });
+
+  // highlight king in check
+  if (chess.in_check()){
+    const kingColor = chess.turn();
+    const kingSquare = findKingSquare(kingColor);
+    if (kingSquare){
+      const el = document.querySelector(`.square[data-square="${kingSquare}"]`);
+      if (el) el.classList.add('in-check');
+    }
+  }
+}
+
+function findKingSquare(color){
+  const boardState = chess.board();
+  for (let r=0;r<8;r++){
+    for (let f=0;f<8;f++){
+      const p = boardState[r][f];
+      if (p && p.type === 'k' && p.color === color){
+        return FILES[f] + (8-r);
+      }
+    }
+  }
+  return null;
+}
+
+function onSquareClick(square){
+  if (chess.game_over()) return;
+  if (mode === 'computer' && chess.turn() !== 'w') return;      // wait for AI
+  if (mode === 'friend' && (!isMyTurnOnline || chess.turn() !== myColor)) return;
+
+  const piece = chess.get(square);
+
+  // If a square is already selected and this click is a legal target -> move
+  if (selectedSquare && legalTargets.includes(square)){
+    attemptMove(selectedSquare, square);
+    return;
+  }
+
+  // Otherwise, select a new piece (must belong to the side to move)
+  if (piece && piece.color === chess.turn()){
+    selectedSquare = square;
+    legalTargets = chess.moves({ square, verbose:true }).map(m=>m.to);
+  } else {
+    selectedSquare = null;
+    legalTargets = [];
+  }
+  renderBoard();
+}
+
+function attemptMove(from, to){
+  const moves = chess.moves({ square: from, verbose:true });
+  const moveInfo = moves.find(m=>m.to === to);
+  if (!moveInfo) return;
+
+  // Handle pawn promotion with a piece picker
+  if (moveInfo.flags.includes('p')){
+    showPromotionModal(moveInfo.color, (promoteTo)=>{
+      finalizeMove(from, to, promoteTo);
+    });
+    return;
+  }
+  finalizeMove(from, to);
+}
+
+function finalizeMove(from, to, promotion){
+  const wasCapture = !!chess.get(to) || chess.moves({square:from, verbose:true})
+    .some(m=>m.to===to && m.flags.includes('e'));
+
+  const moveObj = chess.move({ from, to, promotion: promotion || 'q' });
+  if (!moveObj) return;
+
+  selectedSquare = null; legalTargets = [];
+  lastMove = { from, to };
+
+  renderBoard();
+  updateCapturedPieces();
+  renderHistory(chess.history());
+  updateStatus();
+  resetClockTickBaseline();
+
+  if (moveObj.flags.includes('c') || moveObj.flags.includes('e')) Sound.capture();
+  else Sound.move();
+  if (chess.in_check() && !chess.game_over()) Sound.check();
+
+  if (mode === 'friend'){
+    pushMoveToRoom(moveObj);
+  }
+
+  if (chess.game_over()){
+    stopClock();
+    showGameOverModal();
+    return;
+  }
+
+  // Computer's turn
+  if (mode === 'computer' && chess.turn() === 'b'){
+    setTimeout(makeComputerMove, 500 + Math.random()*450); // responds within ~1s
+  }
+}
+
+function showPromotionModal(color, callback){
+  const modal = document.getElementById('promoModal');
+  const opts = document.getElementById('promoOptions');
+  opts.innerHTML = '';
+  ['q','r','b','n'].forEach(type=>{
+    const btn = document.createElement('button');
+    btn.className = 'promo-btn';
+    btn.textContent = PIECE_UNICODE[color][type];
+    btn.addEventListener('click', ()=>{
+      modal.classList.add('hidden');
+      callback(type);
+    });
+    opts.appendChild(btn);
+  });
+  modal.classList.remove('hidden');
+}
+
+/* Captured pieces display: diff full piece set vs pieces currently on board */
+const FULL_SET = { p:8, n:2, b:2, r:2, q:1 };
+function updateCapturedPieces(){
+  const boardState = chess.board();
+  const counts = { w:{p:0,n:0,b:0,r:0,q:0}, b:{p:0,n:0,b:0,r:0,q:0} };
+  boardState.forEach(row=>row.forEach(cell=>{
+    if (cell && counts[cell.color][cell.type] !== undefined) counts[cell.color][cell.type]++;
+  }));
+
+  const capturedByWhite = []; // black pieces white has captured
+  const capturedByBlack = []; // white pieces black has captured
+  ['p','n','b','r','q'].forEach(type=>{
+    const missingBlack = FULL_SET[type] - counts.b[type];
+    const missingWhite = FULL_SET[type] - counts.w[type];
+    for (let i=0;i<missingBlack;i++) capturedByWhite.push(PIECE_UNICODE.b[type]);
+    for (let i=0;i<missingWhite;i++) capturedByBlack.push(PIECE_UNICODE.w[type]);
+  });
+
+  const topEl = document.getElementById('capturedTop');
+  const bottomEl = document.getElementById('capturedBottom');
+  const topIsBlack = !boardFlipped;
+  topEl.innerHTML = (topIsBlack ? capturedByWhite : capturedByBlack).map(p=>`<span>${p}</span>`).join('');
+  bottomEl.innerHTML = (topIsBlack ? capturedByBlack : capturedByWhite).map(p=>`<span>${p}</span>`).join('');
+}
+
+function renderHistory(sanList){
+  const el = document.getElementById('historyList');
+  el.innerHTML = '';
+  for (let i=0;i<sanList.length;i+=2){
+    const num = document.createElement('div'); num.className='mv-num'; num.textContent = (i/2+1)+'.';
+    const w = document.createElement('div'); w.className='mv-white'; w.textContent = sanList[i] || '';
+    const b = document.createElement('div'); b.className='mv-black'; b.textContent = sanList[i+1] || '';
+    el.appendChild(num); el.appendChild(w); el.appendChild(b);
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateStatus(){
+  const statusText = document.getElementById('statusText');
+  const statusSub = document.getElementById('statusSub');
+  const turnBanner = document.getElementById('turnBannerText');
+  statusText.classList.remove('check','over');
+
+  const turnName = chess.turn() === 'w' ? 'White' : 'Black';
+
+  if (chess.in_checkmate()){
+    const winner = chess.turn() === 'w' ? 'Black' : 'White';
+    statusText.textContent = 'Checkmate!';
+    statusText.classList.add('over');
+    statusSub.textContent = `${winner} wins the game`;
+    turnBanner.textContent = 'Game over';
+  } else if (chess.in_stalemate()){
+    statusText.textContent = 'Stalemate';
+    statusText.classList.add('over');
+    statusSub.textContent = 'The game is a draw';
+    turnBanner.textContent = 'Game over';
+  } else if (chess.in_draw()){
+    statusText.textContent = 'Draw';
+    statusText.classList.add('over');
+    statusSub.textContent = 'Insufficient material / 50-move rule';
+    turnBanner.textContent = 'Game over';
+  } else if (chess.in_check()){
+    statusText.textContent = `${turnName} is in check!`;
+    statusText.classList.add('check');
+    statusSub.textContent = 'Game in progress';
+    turnBanner.textContent = `${turnName} to move`;
+  } else {
+    statusText.textContent = `${turnName} to move`;
+    statusSub.textContent = 'Game in progress';
+    turnBanner.textContent = `${turnName} to move`;
+  }
+}
+
+function updateActiveTurnUI(turn){
+  const topIsBlack = !boardFlipped;
+  const topActive = (topIsBlack && turn==='b') || (!topIsBlack && turn==='w');
+  document.getElementById('cardTop').classList.toggle('active-turn', topActive);
+  document.getElementById('cardBottom').classList.toggle('active-turn', !topActive);
+}
+
+function updatePlayerCardsColorLabels(){
+  const topIsBlack = !boardFlipped;
+  document.querySelector('#cardTop .player-tag').textContent = topIsBlack ? 'Black' : 'White';
+  document.querySelector('#cardBottom .player-tag').textContent = topIsBlack ? 'White' : 'Black';
+}
+
+/* ---------------------------------------------------------------------- */
+/* 9. CHESS CLOCK                                                        */
+/* ---------------------------------------------------------------------- */
+function formatTime(sec){
+  if (sec >= 999999) return '∞';
+  sec = Math.max(0, Math.round(sec));
+  const m = Math.floor(sec/60).toString().padStart(2,'0');
+  const s = (sec%60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+function renderClocks(){
+  const topIsBlack = !boardFlipped;
+  const topTime = topIsBlack ? blackTime : whiteTime;
+  const bottomTime = topIsBlack ? whiteTime : blackTime;
+  const topEl = document.getElementById('clockTop');
+  const bottomEl = document.getElementById('clockBottom');
+  topEl.textContent = formatTime(topTime);
+  bottomEl.textContent = formatTime(bottomTime);
+  topEl.classList.toggle('low-time', topTime <= 20 && topTime < 999999);
+  bottomEl.classList.toggle('low-time', bottomTime <= 20 && bottomTime < 999999);
+}
+
+function startClock(){
+  stopClock();
+  if (timeControlMinutes === 0){ // unlimited
+    renderClocks();
+    return;
+  }
+  lastTickAt = Date.now();
+  clockInterval = setInterval(()=>{
+    const now = Date.now();
+    const elapsed = (now - lastTickAt) / 1000;
+    lastTickAt = now;
+
+    if (chess.game_over()) { stopClock(); return; }
+    // In online mode, only the local player's own turn drives the authoritative
+    // decrement for their own clock — but for a smooth UI we tick locally for
+    // whichever side is to move, and reconcile with Firestore on each move.
+    if (chess.turn() === 'w') whiteTime = Math.max(0, whiteTime - elapsed);
+    else blackTime = Math.max(0, blackTime - elapsed);
+
+    renderClocks();
+
+    if (whiteTime <= 0 || blackTime <= 0){
+      stopClock();
+      const loser = whiteTime <= 0 ? 'w' : 'b';
+      handleTimeout(loser);
+    }
+  }, 250);
+}
+function stopClock(){
+  if (clockInterval){ clearInterval(clockInterval); clockInterval = null; }
+}
+function resetClockTickBaseline(){ lastTickAt = Date.now(); }
+
+function handleTimeout(loserColor){
+  const winnerName = loserColor === 'w' ? 'Black' : 'White';
+  Sound.gameover();
+  showResultModal('⏱️', 'Time Out!', `${winnerName} wins on time`);
+  if (mode === 'friend' && myColor !== loserColor){
+    pushTimeoutToRoom(loserColor);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 10. COMPUTER AI (Easy difficulty)                                     */
+/* ---------------------------------------------------------------------- */
+const PIECE_VALUE = { p:1, n:3, b:3, r:5, q:9, k:0 };
+
+function makeComputerMove(){
+  if (chess.game_over()) return;
+  const moves = chess.moves({ verbose:true });
+  if (moves.length === 0) return;
+
+  // Easy AI: mostly random, with a mild preference for captures/checks
+  // (weighted random selection keeps it beatable and fast).
+  const weighted = [];
+  moves.forEach(m=>{
+    let weight = 1;
+    if (m.flags.includes('c') || m.flags.includes('e')){
+      const capturedType = m.captured || 'p';
+      weight += PIECE_VALUE[capturedType] || 1;
+    }
+    if (m.flags.includes('p')) weight += 2; // slight bonus for promotion
+    for (let i=0;i<weight;i++) weighted.push(m);
+  });
+  const chosen = weighted[Math.floor(Math.random()*weighted.length)];
+
+  const promotion = chosen.flags.includes('p') ? 'q' : undefined;
+  const moveObj = chess.move({ from: chosen.from, to: chosen.to, promotion });
+  if (!moveObj) return;
+
+  lastMove = { from: chosen.from, to: chosen.to };
+  selectedSquare = null; legalTargets = [];
+
+  renderBoard();
+  updateCapturedPieces();
+  renderHistory(chess.history());
+  updateStatus();
+  resetClockTickBaseline();
+
+  if (moveObj.flags.includes('c') || moveObj.flags.includes('e')) Sound.capture();
+  else Sound.move();
+  if (chess.in_check() && !chess.game_over()) Sound.check();
+
+  if (chess.game_over()){
+    stopClock();
+    showGameOverModal();
+  }
+}
+
+/* ---------------------------------------------------------------------- */
+/* 11. GAME LIFECYCLE (start / restart / undo / game over)               */
+/* ---------------------------------------------------------------------- */
+let gameEndedShown = false;
+
+function startComputerGame(){
+  mode = 'computer';
+  boardFlipped = false;
+  myColor = 'w';
+  chess.reset();
+  selectedSquare = null; legalTargets = []; lastMove = null;
+  gameEndedShown = false;
+
+  timeControlMinutes = 10;
+  whiteTime = timeControlMinutes*60; blackTime = timeControlMinutes*60;
+
+  enterGameScreen();
+  document.getElementById('gameModeTitle').textContent = 'Playing vs Computer';
+  document.getElementById('nameTop').textContent = 'Computer';
+  document.getElementById('nameBottom').textContent = 'You';
+  document.getElementById('btnCopyLinkGame').classList.add('hidden');
+  document.getElementById('btnUndo').disabled = false;
+  document.getElementById('btnUndo').title = '';
+  updatePlayerCardsColorLabels();
+
+  renderBoard();
+  updateCapturedPieces();
+  renderHistory([]);
+  updateStatus();
+  updateActiveTurnUI('w');
+  startClock();
+}
+
+function enterGameScreen(){
+  showScreen('screen-game');
+  document.getElementById('resultModal').classList.add('hidden');
+  gameEndedShown = false;
+  renderBoard();
+  renderClocks();
+}
+
+document.getElementById('btnRestart').addEventListener('click', ()=>{
+  if (mode === 'friend'){
+    showToast('Restart isn\'t available in online mode — start a new room instead.');
+    return;
+  }
+  startComputerGame();
+});
+
+document.getElementById('btnUndo').addEventListener('click', ()=>{
+  if (mode === 'friend') return; // disabled in online mode
+  chess.undo();
+  if (mode === 'computer' && chess.turn() === 'b') chess.undo(); // undo AI move too
+  selectedSquare = null; legalTargets = [];
+  lastMove = null;
+  renderBoard();
+  updateCapturedPieces();
+  renderHistory(chess.history());
+  updateStatus();
+  updateActiveTurnUI(chess.turn());
+});
+
+function showGameOverModal(){
+  gameEndedShown = true;
+  let emoji = '🤝', title = 'Draw', sub = 'The game ended in a draw';
+
+  if (chess.in_checkmate()){
+    const winner = chess.turn() === 'w' ? 'Black' : 'White';
+    emoji = '🏆'; title = 'Checkmate!'; sub = `${winner} wins the game`;
+    Sound.win();
+  } else if (chess.in_stalemate()){
+    emoji = '🤝'; title = 'Stalemate'; sub = 'No legal moves — the game is a draw';
+    Sound.gameover();
+  } else {
+    emoji = '🤝'; title = 'Draw'; sub = 'Draw by insufficient material or repetition';
+    Sound.gameover();
+  }
+  showResultModal(emoji, title, sub);
+}
+
+function handleGameEndFromData(data){
+  gameEndedShown = true;
+  stopClock();
+  if (data.reason === 'checkmate'){
+    const winnerName = data.winner === 'w' ? 'White' : 'Black';
+    Sound.win();
+    showResultModal('🏆', 'Checkmate!', `${winnerName} wins the game`);
+  } else if (data.reason === 'timeout'){
+    const winnerName = data.winner === 'w' ? 'White' : 'Black';
+    Sound.gameover();
+    showResultModal('⏱️', 'Time Out!', `${winnerName} wins on time`);
+  } else {
+    Sound.gameover();
+    showResultModal('🤝', 'Draw', 'The game ended in a draw');
+  }
+}
+
+function showResultModal(emoji, title, sub){
+  document.getElementById('resultEmoji').textContent = emoji;
+  document.getElementById('resultTitle').textContent = title;
+  document.getElementById('resultSub').textContent = sub;
+  document.getElementById('resultModal').classList.remove('hidden');
+}
+
+document.getElementById('btnPlayAgain').addEventListener('click', ()=>{
+  document.getElementById('resultModal').classList.add('hidden');
+  if (mode === 'computer') startComputerGame();
+  else showToast('Create a new room to play again with your friend.');
+});
+document.getElementById('btnResultHome').addEventListener('click', ()=>{
+  document.getElementById('resultModal').classList.add('hidden');
+  leaveGameToHome();
+});
+
+function leaveGameToHome(){
+  stopClock();
+  cleanupOnlineListener();
+  mode = null; roomId = null;
+  chess.reset();
+  history.replaceState(null, '', location.pathname); // clear ?room= from URL
+  showScreen('screen-home');
+}
+
+/* Kick off clock ticking whenever an online game becomes active */
+const origApplyRoomData = applyRoomData;
+applyRoomData = function(data, enterGameOnActive){
+  origApplyRoomData(data, enterGameOnActive);
+  if (data.status === 'active' && !clockInterval && timeControlMinutes !== 0){
+    startClock();
+  }
+  if (data.status === 'finished'){
+    stopClock();
+  }
+};
+</script>
+</body>
+</html>
